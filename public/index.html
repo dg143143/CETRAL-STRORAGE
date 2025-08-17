@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Trading App</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <nav>
+            <h1>Trading Dashboard</h1>
+            <div id="user-info">
+                <span>Welcome, <strong id="username-display"></strong>!</span>
+                <a href="/admin.html" id="admin-link" style="display: none;">Admin Panel</a>
+                <button id="logout-btn" class="btn">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div class="card">
+            <h2>Trading Signals</h2>
+            <form id="add-signal-form">
+                <div class="form-group">
+                    <label for="signal-name">New Signal</label>
+                    <input type="text" id="signal-name" placeholder="e.g., BUY BTC/USD @ 50000" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: auto;">Add Signal</button>
+            </form>
+            <div id="signals-list" style="margin-top: 2rem;">
+                <!-- Signals will be loaded here -->
+            </div>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            authService.requireAuth();
+
+            const user = authService.getUser();
+            document.getElementById('username-display').textContent = user.username;
+
+            if (authService.getRole() === 'admin') {
+                document.getElementById('admin-link').style.display = 'inline-block';
+            }
+
+            document.getElementById('logout-btn').addEventListener('click', () => {
+                authService.logout();
+            });
+
+            const signalsList = document.getElementById('signals-list');
+            const addSignalForm = document.getElementById('add-signal-form');
+
+            // Fetch and display signals
+            const fetchSignals = async () => {
+                try {
+                    const response = await fetch('/api/signals');
+                    const data = await response.json();
+                    if (data.success) {
+                        signalsList.innerHTML = ''; // Clear list
+                        if (data.signals.length === 0) {
+                            signalsList.innerHTML = '<p>No signals yet. Add one!</p>';
+                        } else {
+                            const table = document.createElement('table');
+                            table.innerHTML = `
+                                <thead>
+                                    <tr>
+                                        <th>Signal</th>
+                                        <th>Created At</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.signals.map(signal => `
+                                        <tr>
+                                            <td>${signal.name}</td>
+                                            <td>${new Date(signal.createdAt).toLocaleString()}</td>
+                                            <td><button class="btn btn-danger btn-sm" data-id="${signal.id}">Delete</button></td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            `;
+                            signalsList.appendChild(table);
+                        }
+                    }
+                } catch (error) {
+                    signalsList.innerHTML = '<p>Error loading signals.</p>';
+                }
+            };
+
+            // Add a new signal
+            addSignalForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const signalName = document.getElementById('signal-name').value;
+                if (!signalName) return;
+
+                try {
+                    await fetch('/api/signals', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: signalName })
+                    });
+                    addSignalForm.reset();
+                    fetchSignals(); // Refresh list
+                } catch (error) {
+                    alert('Failed to add signal.');
+                }
+            });
+
+            // Delete a signal (using event delegation)
+            signalsList.addEventListener('click', async (e) => {
+                if (e.target.matches('button[data-id]')) {
+                    const signalId = e.target.dataset.id;
+                    if (confirm('Are you sure you want to delete this signal?')) {
+                        try {
+                            await fetch(`/api/signals/${signalId}`, { method: 'DELETE' });
+                            fetchSignals(); // Refresh list
+                        } catch (error) {
+                            alert('Failed to delete signal.');
+                        }
+                    }
+                }
+            });
+
+            fetchSignals(); // Initial fetch
+        });
+    </script>
+</body>
+</html>
